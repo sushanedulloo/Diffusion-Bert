@@ -1,0 +1,49 @@
+# ---------------------------------------------------------------
+# Core deep learning
+# ---------------------------------------------------------------
+torch>=2.1.0
+torchvision>=0.16.0          # not directly used but often co-installed
+
+# ---------------------------------------------------------------
+# Tokenizer (only the tokenizer from HuggingFace Transformers is used;
+# the model is built from scratch in this repository)
+# ---------------------------------------------------------------
+transformers>=4.38.0
+
+# ---------------------------------------------------------------
+# Datasets — used to stream Wikipedia (104 languages) and BooksCorpus
+# from the HuggingFace Hub, matching the datasets in the BERT paper.
+# Also used to load all downstream evaluation datasets.
+# ---------------------------------------------------------------
+datasets>=2.18.0
+
+# ---------------------------------------------------------------
+# Utilities
+# ---------------------------------------------------------------
+numpy>=1.24.0
+tqdm>=4.66.0                 # progress bars (optional but recommended)
+sentencepiece>=0.1.99        # dependency of some multilingual tokenizers
+protobuf>=3.20.0             # required by sentencepiece / HF tokenizers
+
+# ---------------------------------------------------------------
+# Evaluation metrics
+# ---------------------------------------------------------------
+scikit-learn>=1.3.0          # accuracy, F1, Matthews correlation
+scipy>=1.11.0                # Pearson / Spearman correlation (STS-B)
+seqeval>=1.2.2               # span-level F1 for NER (IOB2)
+
+# ---------------------------------------------------------------
+# MDLM / Diffusion pre-training
+# (no additional packages required — uses torch math only)
+# ---------------------------------------------------------------
+# training/noise_schedule.py  — LinearAlphaScheduler, CosineAlphaScheduler
+# model/diffusion_heads.py    — BertForDiffusion (MLM head, no NSP)
+# data/diffusion_collator.py  — DiffusionCollator
+# training/diffusion_trainer.py — MDLMPreTrainer
+# All MDLM code depends only on torch (already listed above).
+
+# ---------------------------------------------------------------
+# Optional: distributed / accelerated training
+# ---------------------------------------------------------------
+# accelerate>=0.27.0         # HuggingFace Accelerate for multi-GPU / TPU
+# deepspeed>=0.13.0          # ZeRO optimisation for very large models
