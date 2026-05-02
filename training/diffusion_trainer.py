@@ -72,14 +72,16 @@ class MDLMPreTrainer:
         config,
         train_dataset,
         collator,
-        scheduler:   Optional[BaseAlphaScheduler] = None,
-        output_dir:  str  = "./output_mdlm",
-        use_amp:     bool = True,
+        scheduler:            Optional[BaseAlphaScheduler] = None,
+        output_dir:           str  = "./output_mdlm",
+        use_amp:              bool = True,
+        post_save_callback=None,
     ):
         self.config        = config
         self.train_dataset = train_dataset
         self.collator      = collator
         self.output_dir    = output_dir
+        self.post_save_callback = post_save_callback
 
         self.noise_scheduler = scheduler if scheduler is not None else LinearAlphaScheduler()
         self.time_epsilon    = getattr(config, "time_epsilon",    1e-3)
@@ -331,9 +333,18 @@ class MDLMPreTrainer:
         scaler,
         tag:        Optional[str] = None,
     ) -> None:
-        name     = tag if tag else f"step_{step:07d}"
-        save_dir = os.path.join(self.output_dir, f"checkpoint_{name}")
-        os.makedirs(save_dir, exist_ok=True)
+        import shutil
+        import tempfile
+
+        name = tag if tag else f"step_{step:07d}"
+
+        # When a GDrive callback is set, use a temp dir — nothing persists on disk.
+        # Otherwise fall back to output_dir for local storage.
+        if self.post_save_callback:
+            save_dir = tempfile.mkdtemp(prefix=f"bert_ckpt_{name}_")
+        else:
+            save_dir = os.path.join(self.output_dir, f"checkpoint_{name}")
+            os.makedirs(save_dir, exist_ok=True)
 
         raw_model = (
             self.model.module if isinstance(self.model, nn.DataParallel)
@@ -349,7 +360,18 @@ class MDLMPreTrainer:
             state["scaler_state"] = scaler.state_dict()
 
         torch.save(state, os.path.join(save_dir, "checkpoint.pt"))
-        logger.info(f"Checkpoint saved → {save_dir}")
+        logger.info(f"Checkpoint serialised ({name})")
+
+        if self.post_save_callback:
+            try:
+                self.post_save_callback(save_dir)
+            except Exception as exc:
+                logger.warning(f"Post-save callback failed: {exc}")
+            finally:
+                shutil.rmtree(save_dir, ignore_errors=True)
+                logger.info("Temp checkpoint removed from disk.")
+        else:
+            logger.info(f"Checkpoint saved → {save_dir}")
 
     def _load_checkpoint(
         self,

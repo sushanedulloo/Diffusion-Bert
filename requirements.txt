@@ -43,6 +43,29 @@ seqeval>=1.2.2               # span-level F1 for NER (IOB2)
 # All MDLM code depends only on torch (already listed above).
 
 # ---------------------------------------------------------------
+# Diffusion-style evaluation (generative mode)
+# New files: evaluate/diffusion_utils.py, instruction_templates.py,
+#            diffusion_finetuner.py, diffusion_glue.py,
+#            diffusion_squad.py, diffusion_ner.py, diffusion_swag.py
+#
+# These files replace all 13 BERT-paper discriminative evaluations with
+# instruction-prompted MDLM generation and zero-shot PLL scoring.
+# No additional mandatory packages — all imports use torch + above libs.
+# ---------------------------------------------------------------
+
+# Generation quality evaluation (evaluate/generation_quality.py)
+# Requires GPT-2 Large as a scoring model (auto-downloaded via HF Hub).
+# Also optionally requires mauve-text for MAUVE score:
+# mauve-text>=0.3.0          # pip install mauve-text  (optional)
+
+# ---------------------------------------------------------------
+# Google Drive checkpoint upload (used by gdrive_uploader.py)
+# ---------------------------------------------------------------
+google-api-python-client>=2.100.0
+google-auth-httplib2>=0.2.0
+google-auth-oauthlib>=1.1.0
+
+# ---------------------------------------------------------------
 # Optional: distributed / accelerated training
 # ---------------------------------------------------------------
 # accelerate>=0.27.0         # HuggingFace Accelerate for multi-GPU / TPU

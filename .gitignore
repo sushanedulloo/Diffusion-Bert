@@ -1,0 +1,32 @@
+# Markdown files (except README)
+*.md
+!README.md
+
+# Google Drive credentials — never commit these
+token.pickle
+credentials.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Virtual environments
+bert_env/
+venv/
+.env/
+env/
+
+# Training outputs (large, not worth versioning)
+output*/
+*.log
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store

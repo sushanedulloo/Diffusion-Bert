@@ -80,6 +80,15 @@ def _build_parser() -> argparse.ArgumentParser:
                         choices=["cola", "sst2", "mrpc", "stsb", "qqp",
                                  "mnli", "qnli", "rte", "wnli"],
                         help="Which GLUE task to evaluate")
+    p_glue.add_argument("--eval_mode",
+                        choices=["discriminative", "generative"],
+                        default="discriminative",
+                        help="discriminative: BERT-style classification head. "
+                             "generative: instruction-prompted diffusion generation.")
+    p_glue.add_argument("--num_steps",   type=int,   default=200,
+                        help="Reverse diffusion steps (generative mode only)")
+    p_glue.add_argument("--temperature", type=float, default=1.0,
+                        help="Sampling temperature (generative mode only)")
 
     # ── SQuAD ────────────────────────────────────────────────────────
     p_sq = sub.add_parser("squad", help="SQuAD v1.1 / v2.0")
@@ -88,15 +97,38 @@ def _build_parser() -> argparse.ArgumentParser:
                       help="SQuAD version (1 or 2)")
     p_sq.add_argument("--batch_size", type=int, default=12,  # override default — SQuAD is heavier
                       help="Train batch size (default 12 for SQuAD)")
+    p_sq.add_argument("--eval_mode",
+                      choices=["discriminative", "generative"],
+                      default="discriminative",
+                      help="discriminative: span-extraction head. "
+                           "generative: instruction-prompted diffusion generation.")
+    p_sq.add_argument("--num_steps",   type=int,   default=200,
+                      help="Reverse diffusion steps (generative mode only)")
+    p_sq.add_argument("--temperature", type=float, default=1.0,
+                      help="Sampling temperature (generative mode only)")
 
     # ── NER ──────────────────────────────────────────────────────────
     p_ner = sub.add_parser("ner", help="CoNLL-2003 NER")
     _add_common_args(p_ner)
+    p_ner.add_argument("--eval_mode",
+                       choices=["discriminative", "generative"],
+                       default="discriminative",
+                       help="discriminative: per-token classification. "
+                            "generative: instruction-prompted diffusion generation.")
+    p_ner.add_argument("--num_steps",   type=int,   default=200,
+                       help="Reverse diffusion steps (generative mode only)")
+    p_ner.add_argument("--temperature", type=float, default=1.0,
+                       help="Sampling temperature (generative mode only)")
 
     # ── SWAG ─────────────────────────────────────────────────────────
     p_swag = sub.add_parser("swag", help="SWAG commonsense multiple choice")
     _add_common_args(p_swag)
     p_swag.add_argument("--batch_size", type=int, default=16)
+    p_swag.add_argument("--eval_mode",
+                        choices=["discriminative", "generative"],
+                        default="discriminative",
+                        help="discriminative: multiple-choice classification head. "
+                             "generative: zero-shot PLL scoring (no fine-tuning).")
 
     # ── XNLI ─────────────────────────────────────────────────────────
     p_xnli = sub.add_parser("xnli", help="XNLI zero-shot cross-lingual NLI")
@@ -221,63 +253,123 @@ def main() -> None:
 
     # ------------------------------------------------------------------ #
     if args.command == "glue":
-        from evaluate.glue import run as glue_run
-        results = glue_run(
-            task_name=args.task,
-            checkpoint_dir=args.checkpoint,
-            output_dir=args.output_dir,
-            max_seq_length=args.max_seq_length,
-            batch_size=args.batch_size,
-            num_epochs=args.epochs,
-            learning_rate=args.lr,
-            seed=args.seed,
-            use_amp=use_amp,
-        )
+        eval_mode = getattr(args, "eval_mode", "discriminative")
+        if eval_mode == "generative":
+            from evaluate.diffusion_glue import run as glue_run
+            results = glue_run(
+                task_name=args.task,
+                checkpoint_dir=args.checkpoint,
+                output_dir=args.output_dir,
+                max_seq_length=args.max_seq_length,
+                batch_size=args.batch_size,
+                num_epochs=args.epochs,
+                learning_rate=args.lr,
+                seed=args.seed,
+                use_amp=use_amp,
+                num_steps=getattr(args, "num_steps", 200),
+                temperature=getattr(args, "temperature", 1.0),
+            )
+        else:
+            from evaluate.glue import run as glue_run
+            results = glue_run(
+                task_name=args.task,
+                checkpoint_dir=args.checkpoint,
+                output_dir=args.output_dir,
+                max_seq_length=args.max_seq_length,
+                batch_size=args.batch_size,
+                num_epochs=args.epochs,
+                learning_rate=args.lr,
+                seed=args.seed,
+                use_amp=use_amp,
+            )
         all_results["glue"] = results
 
     # ------------------------------------------------------------------ #
     elif args.command == "squad":
-        from evaluate.squad import run as squad_run
-        results = squad_run(
-            version=args.version,
-            checkpoint_dir=args.checkpoint,
-            output_dir=args.output_dir,
-            batch_size=args.batch_size,
-            num_epochs=args.epochs,
-            learning_rate=args.lr,
-            seed=args.seed,
-            use_amp=use_amp,
-        )
+        eval_mode = getattr(args, "eval_mode", "discriminative")
+        if eval_mode == "generative":
+            from evaluate.diffusion_squad import run as squad_run
+            results = squad_run(
+                version=args.version,
+                checkpoint_dir=args.checkpoint,
+                output_dir=args.output_dir,
+                batch_size=args.batch_size,
+                num_epochs=args.epochs,
+                learning_rate=args.lr,
+                seed=args.seed,
+                use_amp=use_amp,
+                num_steps=getattr(args, "num_steps", 200),
+                temperature=getattr(args, "temperature", 1.0),
+            )
+        else:
+            from evaluate.squad import run as squad_run
+            results = squad_run(
+                version=args.version,
+                checkpoint_dir=args.checkpoint,
+                output_dir=args.output_dir,
+                batch_size=args.batch_size,
+                num_epochs=args.epochs,
+                learning_rate=args.lr,
+                seed=args.seed,
+                use_amp=use_amp,
+            )
         all_results["squad"] = results
 
     # ------------------------------------------------------------------ #
     elif args.command == "ner":
-        from evaluate.ner import run as ner_run
-        results = ner_run(
-            checkpoint_dir=args.checkpoint,
-            output_dir=args.output_dir,
-            max_seq_length=args.max_seq_length,
-            batch_size=args.batch_size,
-            num_epochs=args.epochs,
-            learning_rate=args.lr,
-            seed=args.seed,
-            use_amp=use_amp,
-        )
+        eval_mode = getattr(args, "eval_mode", "discriminative")
+        if eval_mode == "generative":
+            from evaluate.diffusion_ner import run as ner_run
+            results = ner_run(
+                checkpoint_dir=args.checkpoint,
+                output_dir=args.output_dir,
+                max_seq_length=args.max_seq_length,
+                batch_size=args.batch_size,
+                num_epochs=args.epochs,
+                learning_rate=args.lr,
+                seed=args.seed,
+                use_amp=use_amp,
+                num_steps=getattr(args, "num_steps", 200),
+                temperature=getattr(args, "temperature", 1.0),
+            )
+        else:
+            from evaluate.ner import run as ner_run
+            results = ner_run(
+                checkpoint_dir=args.checkpoint,
+                output_dir=args.output_dir,
+                max_seq_length=args.max_seq_length,
+                batch_size=args.batch_size,
+                num_epochs=args.epochs,
+                learning_rate=args.lr,
+                seed=args.seed,
+                use_amp=use_amp,
+            )
         all_results["ner"] = results
 
     # ------------------------------------------------------------------ #
     elif args.command == "swag":
-        from evaluate.swag import run as swag_run
-        results = swag_run(
-            checkpoint_dir=args.checkpoint,
-            output_dir=args.output_dir,
-            max_seq_length=args.max_seq_length,
-            batch_size=args.batch_size,
-            num_epochs=args.epochs,
-            learning_rate=args.lr,
-            seed=args.seed,
-            use_amp=use_amp,
-        )
+        eval_mode = getattr(args, "eval_mode", "discriminative")
+        if eval_mode == "generative":
+            from evaluate.diffusion_swag import run as swag_run
+            results = swag_run(
+                checkpoint_dir=args.checkpoint,
+                output_dir=args.output_dir,
+                max_seq_length=args.max_seq_length,
+                batch_size=args.batch_size,
+                seed=args.seed,
+            )
+        else:
+            from evaluate.swag import run as swag_run
+            results = swag_run(
+                checkpoint_dir=args.checkpoint,
+                output_dir=args.output_dir,
+                max_seq_length=args.max_seq_length,
+                batch_size=args.batch_size,
+                num_epochs=args.epochs,
+                learning_rate=args.lr,
+                seed=args.seed,
+                use_amp=use_amp,
+            )
         all_results["swag"] = results
 
     # ------------------------------------------------------------------ #
