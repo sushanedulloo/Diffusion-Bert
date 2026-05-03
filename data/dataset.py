@@ -12,11 +12,15 @@ token_type_ids are all zeros (single segment — no NSP).
 MLM masking is applied dynamically in the DataCollator, not here.
 """
 
+import hashlib
 import logging
+import os
+import pickle
 from typing import List, Dict, Optional
 
 import torch
 from torch.utils.data import Dataset
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -41,18 +45,42 @@ class BertPretrainingDataset(Dataset):
         max_seq_length: int = 512,
         max_examples: Optional[int] = None,
         seed: int = 42,
+        cache_dir: str = "./dataset_cache",
     ):
-        self.tokenizer        = tokenizer
-        self.max_seq_length   = max_seq_length
-        self.max_content_tokens = max_seq_length - 2   # reserve [CLS] and [SEP]
+        self.tokenizer          = tokenizer
+        self.max_seq_length     = max_seq_length
+        self.max_content_tokens = max_seq_length - 2
 
-        logger.info("Pre-tokenising corpus documents …")
-        self.tokenized_docs: List[List[List[int]]] = self._tokenize_corpus(corpus)
-        logger.info(f"  {len(self.tokenized_docs):,} documents tokenised.")
+        cache_path = self._cache_path(corpus, max_seq_length, max_examples, cache_dir)
 
-        logger.info("Building pre-training examples …")
-        self.examples = self._build_examples(max_examples)
-        logger.info(f"  {len(self.examples):,} examples created.")
+        if os.path.exists(cache_path):
+            logger.info(f"Loading dataset from cache: {cache_path}")
+            with open(cache_path, "rb") as f:
+                self.examples = pickle.load(f)
+            logger.info(f"  {len(self.examples):,} examples loaded from cache.")
+        else:
+            logger.info("Pre-tokenising corpus documents …")
+            self.tokenized_docs: List[List[List[int]]] = self._tokenize_corpus(corpus)
+            logger.info(f"  {len(self.tokenized_docs):,} documents tokenised.")
+
+            logger.info("Building pre-training examples …")
+            self.examples = self._build_examples(max_examples)
+            logger.info(f"  {len(self.examples):,} examples created.")
+
+            os.makedirs(cache_dir, exist_ok=True)
+            with open(cache_path, "wb") as f:
+                pickle.dump(self.examples, f)
+            logger.info(f"Dataset cached to: {cache_path}")
+
+    # ------------------------------------------------------------------ #
+    # Cache
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _cache_path(corpus, max_seq_length, max_examples, cache_dir) -> str:
+        key = f"{len(corpus.documents)}_{max_seq_length}_{max_examples}_{corpus.use_bookcorpus}"
+        h = hashlib.md5(key.encode()).hexdigest()[:10]
+        return os.path.join(cache_dir, f"dataset_{h}.pkl")
 
     # ------------------------------------------------------------------ #
     # Tokenisation
@@ -64,7 +92,7 @@ class BertPretrainingDataset(Dataset):
         token-id sequences.  Empty segments are dropped.
         """
         tokenized_docs = []
-        for doc in corpus.documents:
+        for doc in tqdm(corpus.documents, desc="Tokenising", unit="doc", dynamic_ncols=True):
             tokenized_doc = []
             for segment in doc:
                 ids = self.tokenizer.encode(segment, add_special_tokens=False)
@@ -90,14 +118,18 @@ class BertPretrainingDataset(Dataset):
         pad_id = self.tokenizer.pad_token_id
 
         examples = []
+        pbar = tqdm(
+            self.tokenized_docs,
+            desc="Building examples",
+            unit="doc",
+            dynamic_ncols=True,
+        )
 
-        for document in self.tokenized_docs:
-            # Flatten document into a single token stream, then chunk
+        for document in pbar:
             token_stream: List[int] = []
             for segment in document:
                 token_stream.extend(segment)
 
-            # Slide through the stream in non-overlapping chunks
             for start in range(0, len(token_stream), self.max_content_tokens):
                 chunk = token_stream[start : start + self.max_content_tokens]
                 if not chunk:
@@ -109,7 +141,7 @@ class BertPretrainingDataset(Dataset):
 
                 input_ids      += [pad_id] * pad_len
                 attention_mask  = [1] * seq_len + [0] * pad_len
-                token_type_ids  = [0] * self.max_seq_length  # single segment
+                token_type_ids  = [0] * self.max_seq_length
 
                 examples.append({
                     "input_ids":      input_ids,
@@ -118,7 +150,10 @@ class BertPretrainingDataset(Dataset):
                 })
 
                 if max_examples and len(examples) >= max_examples:
+                    pbar.close()
                     return examples
+
+            pbar.set_postfix(examples=len(examples))
 
         return examples
 

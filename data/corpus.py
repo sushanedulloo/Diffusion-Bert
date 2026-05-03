@@ -102,6 +102,12 @@ class TextCorpus:
             logger.info("Loading BooksCorpus …")
             ds = load_dataset("bookcorpus", split="train", trust_remote_code=True)
 
+            # Respect max_docs: each pseudo-doc = _BOOK_CHUNK_SIZE sentences
+            if self.max_docs is not None:
+                max_sentences = self.max_docs * _BOOK_CHUNK_SIZE
+                ds = ds.select(range(min(max_sentences, len(ds))))
+                logger.info(f"  BooksCorpus capped at {len(ds):,} sentences (max_docs={self.max_docs}).")
+
             sentences = [
                 item["text"].strip()
                 for item in ds
