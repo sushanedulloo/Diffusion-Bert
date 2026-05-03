@@ -133,18 +133,19 @@ class BertPreTrainer:
             resume_from_checkpoint:      path to a checkpoint directory to resume from
         """
         # ---- DataLoader ------------------------------------------------ #
-        # `batch_size` here is per-step; if using DataParallel divide by GPU count
-        effective_batch = max(1, batch_size // max(1, torch.cuda.device_count()))
+        effective_batch = batch_size  # single GPU — no need to divide
 
+        logger.info(f"Creating DataLoader (batch={effective_batch}, workers={dataloader_num_workers}) ...")
         train_loader = DataLoader(
             self.train_dataset,
             batch_size=effective_batch,
             shuffle=True,
             collate_fn=self.collator,
             num_workers=dataloader_num_workers,
-            pin_memory=(self.device.type == "cuda"),
+            pin_memory=False,   # pin_memory can hang on NAS/network filesystems
             drop_last=True,
         )
+        logger.info("DataLoader ready.")
 
         # ---- Optimiser & scheduler ------------------------------------- #
         optimizer = get_bert_optimizer(
@@ -188,10 +189,14 @@ class BertPreTrainer:
         running_loss = 0.0
         t0 = time.time()
 
+        logger.info("Entering training loop ...")
         while global_step < num_train_steps:
             for batch in train_loader:
                 if global_step >= num_train_steps:
                     break
+
+                if global_step == 0:
+                    logger.info("First batch fetched — starting forward pass ...")
 
                 # Determine current sequence length based on training phase
                 current_max_len = (
