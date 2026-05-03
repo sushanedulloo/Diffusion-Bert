@@ -132,8 +132,8 @@ class BertForPreTraining(nn.Module):
         loss = None
         if labels is not None:
             loss = nn.CrossEntropyLoss(ignore_index=-100)(
-                mlm_logits.view(-1, mlm_logits.size(-1)),
-                labels.view(-1),
+                mlm_logits.reshape(-1, mlm_logits.size(-1)),
+                labels.reshape(-1),
             )
 
         return {
