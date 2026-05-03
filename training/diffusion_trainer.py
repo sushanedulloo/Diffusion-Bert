@@ -125,14 +125,14 @@ class MDLMPreTrainer:
         """
         os.makedirs(self.output_dir, exist_ok=True)
 
-        effective_batch = max(1, batch_size // max(1, torch.cuda.device_count()))
+        effective_batch = batch_size  # single GPU
         train_loader = DataLoader(
             self.train_dataset,
             batch_size=effective_batch,
             shuffle=True,
             collate_fn=self.collator,
             num_workers=dataloader_num_workers,
-            pin_memory=(self.device.type == "cuda"),
+            pin_memory=False,
             drop_last=True,
         )
 
@@ -165,6 +165,7 @@ class MDLMPreTrainer:
         )
 
         optimizer.zero_grad()
+        micro_step = 0
 
         while global_step < num_train_steps:
             for batch in train_loader:
@@ -191,11 +192,10 @@ class MDLMPreTrainer:
                     loss.backward()
 
                 running_loss += loss.item() * gradient_accumulation_steps
+                micro_step += 1
 
                 # ── Optimizer step ───────────────────────────────────
-                micro_step = global_step * gradient_accumulation_steps
-                if (micro_step + 1) % gradient_accumulation_steps == 0 or \
-                        gradient_accumulation_steps == 1:
+                if micro_step % gradient_accumulation_steps == 0:
                     if self.use_amp:
                         scaler.unscale_(optimizer)
                         nn.utils.clip_grad_norm_(self.model.parameters(), max_grad_norm)

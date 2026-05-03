@@ -190,13 +190,11 @@ class BertPreTrainer:
         t0 = time.time()
 
         logger.info("Entering training loop ...")
+        micro_step = 0
         while global_step < num_train_steps:
             for batch in train_loader:
                 if global_step >= num_train_steps:
                     break
-
-                if global_step == 0:
-                    logger.info("First batch fetched — starting forward pass ...")
 
                 # Determine current sequence length based on training phase
                 current_max_len = (
@@ -225,10 +223,10 @@ class BertPreTrainer:
                     loss.backward()
 
                 running_loss += loss.item() * gradient_accumulation_steps
+                micro_step += 1
 
                 # ---- Gradient update every `gradient_accumulation_steps` #
-                micro_step = global_step * gradient_accumulation_steps
-                if (micro_step + 1) % gradient_accumulation_steps == 0:
+                if micro_step % gradient_accumulation_steps == 0:
                     if self.use_amp:
                         scaler.unscale_(optimizer)
                         nn.utils.clip_grad_norm_(self.model.parameters(), max_grad_norm)
