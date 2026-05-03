@@ -33,7 +33,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 
 from training.optimizer import get_bert_optimizer
 from training.scheduler import get_linear_schedule_with_warmup
@@ -157,7 +157,7 @@ class BertPreTrainer:
             num_warmup_steps=warmup_steps,
             num_training_steps=num_train_steps,
         )
-        scaler = GradScaler() if self.use_amp else None
+        scaler = GradScaler("cuda") if self.use_amp else None
 
         # ---- Optionally resume ----------------------------------------- #
         global_step = 0
@@ -204,7 +204,7 @@ class BertPreTrainer:
 
                 # ---- Forward + backward -------------------------------- #
                 if self.use_amp:
-                    with autocast():
+                    with autocast("cuda"):
                         outputs = self.model(**batch)
                         loss = outputs["loss"]
                         if isinstance(loss, torch.Tensor) and loss.dim() > 0:

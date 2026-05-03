@@ -42,7 +42,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 
 from training.optimizer       import get_bert_optimizer
 from training.scheduler       import get_linear_schedule_with_warmup
@@ -146,7 +146,7 @@ class MDLMPreTrainer:
             num_warmup_steps=warmup_steps,
             num_training_steps=num_train_steps,
         )
-        scaler: Optional[GradScaler] = GradScaler() if self.use_amp else None
+        scaler: Optional[GradScaler] = GradScaler("cuda") if self.use_amp else None
 
         global_step  = 0
         running_loss = 0.0
@@ -181,7 +181,7 @@ class MDLMPreTrainer:
 
                 # ── MDLM forward + loss ──────────────────────────────
                 if self.use_amp:
-                    with autocast():
+                    with autocast("cuda"):
                         loss = self._compute_mdlm_loss(batch)
                     loss = loss / gradient_accumulation_steps
                     scaler.scale(loss).backward()
