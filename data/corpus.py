@@ -71,14 +71,17 @@ class TextCorpus:
         subset = f"{self.wikipedia_date}.en"
         try:
             logger.info(f"Loading English Wikipedia ({subset}) …")
+            # Use streaming when max_docs is set — avoids downloading all 41 files
+            streaming = self.max_docs is not None
             ds = load_dataset(
                 "wikipedia",
                 subset,
                 split="train",
                 trust_remote_code=True,
+                streaming=streaming,
             )
             if self.max_docs is not None:
-                ds = ds.select(range(min(self.max_docs, len(ds))))
+                ds = ds.take(self.max_docs)
 
             added = 0
             for article in ds:
