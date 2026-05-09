@@ -208,20 +208,20 @@ class MDLMPreTrainer:
                     optimizer.zero_grad()
                     global_step += 1
 
-                # ── Logging ──────────────────────────────────────────
-                if global_step % logging_steps == 0 and global_step > 0:
-                    avg_loss   = running_loss / logging_steps
-                    current_lr = lr_scheduler.get_last_lr()[0]
-                    logger.info(
-                        f"[MDLM] step {global_step:>7,}/{num_train_steps:,} | "
-                        f"loss={avg_loss:.4f} | lr={current_lr:.2e} | "
-                        f"seq_len={current_max_len}"
-                    )
-                    running_loss = 0.0
+                    # ── Logging ──────────────────────────────────────
+                    if global_step % logging_steps == 0:
+                        avg_loss   = running_loss / logging_steps
+                        current_lr = lr_scheduler.get_last_lr()[0]
+                        logger.info(
+                            f"[MDLM] step {global_step:>7,}/{num_train_steps:,} | "
+                            f"loss={avg_loss:.4f} | lr={current_lr:.2e} | "
+                            f"seq_len={current_max_len}"
+                        )
+                        running_loss = 0.0
 
-                # ── Checkpoint ───────────────────────────────────────
-                if global_step % save_steps == 0 and global_step > 0:
-                    self._save_checkpoint(global_step, optimizer, lr_scheduler, scaler)
+                    # ── Checkpoint ───────────────────────────────────
+                    if global_step % save_steps == 0:
+                        self._save_checkpoint(global_step, optimizer, lr_scheduler, scaler)
 
         # Final checkpoint
         self._save_checkpoint(global_step, optimizer, lr_scheduler, scaler, tag="final")
