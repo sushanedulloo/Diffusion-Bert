@@ -58,7 +58,7 @@ class TextCorpus:
         use_bookcorpus: bool = True,
         use_indiccorp: bool = True,
         max_docs: Optional[int] = None,
-        wikipedia_date: str = "20220301",
+        wikipedia_date: str = "20231101",
     ):
         self.language       = language.lower()
         self.use_bookcorpus = use_bookcorpus and self.language == "en"
@@ -89,6 +89,11 @@ class TextCorpus:
     # ------------------------------------------------------------------ #
 
     def _load_wikipedia(self, lang: str) -> None:
+        """
+        Load Wikipedia for ``lang`` via the modern ``wikimedia/wikipedia``
+        Parquet dataset.  The legacy ``wikipedia`` repo is a loading script
+        and is rejected by ``datasets`` >= 3.0.
+        """
         try:
             from datasets import load_dataset
         except ImportError:
@@ -96,14 +101,12 @@ class TextCorpus:
 
         subset = f"{self.wikipedia_date}.{lang}"
         try:
-            logger.info(f"Loading Wikipedia ({subset}) …")
-            # Streaming when max_docs is set — avoids downloading every shard
+            logger.info(f"Loading Wikipedia (wikimedia/wikipedia · {subset}) …")
             streaming = self.max_docs is not None
             ds = load_dataset(
-                "wikipedia",
+                "wikimedia/wikipedia",
                 subset,
                 split="train",
-                trust_remote_code=True,
                 streaming=streaming,
             )
             if self.max_docs is not None:
@@ -120,7 +123,9 @@ class TextCorpus:
 
         except Exception as exc:
             logger.warning(
-                f"  Wikipedia ({lang}) could not be loaded: {exc}. Skipping."
+                f"  Wikipedia ({lang}, {subset}) could not be loaded: {exc}. "
+                f"Available dump dates: see https://huggingface.co/datasets/wikimedia/wikipedia "
+                f"(common: 20231101). Skipping."
             )
 
     # ------------------------------------------------------------------ #
@@ -208,12 +213,14 @@ class TextCorpus:
         try:
             logger.info(f"Loading AI4Bharat IndicCorp v2 ({config}) …")
             streaming = self.max_docs is not None
+            # IndicCorp v2 ships ONE HF config ('indiccorp_v2') with
+            # per-language files under data/<lang_script>/.  To download
+            # only Urdu (or whichever lang) we pick the glob directly.
             ds = load_dataset(
                 "ai4bharat/IndicCorpV2",
-                config,
+                data_files=f"data/{config}/*",
                 split="train",
                 streaming=streaming,
-                trust_remote_code=True,
             )
             if self.max_docs is not None:
                 ds = ds.take(self.max_docs)

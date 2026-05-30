@@ -129,8 +129,9 @@ def parse_args() -> argparse.Namespace:
         help="Maximum total packed examples (None = all). Useful for quick tests.",
     )
     data.add_argument(
-        "--wikipedia_date", type=str, default="20220301",
-        help="Wikipedia dump date string used in the HuggingFace dataset id.",
+        "--wikipedia_date", type=str, default="20231101",
+        help="Wikipedia dump date string used in the HuggingFace dataset id. "
+             "Must match an available dump on wikimedia/wikipedia (e.g. 20231101).",
     )
 
     # ----- Model ------------------------------------------------------- #
@@ -340,6 +341,18 @@ def main() -> None:
         max_docs       = args.max_docs,
         wikipedia_date = args.wikipedia_date,
     )
+    if len(corpus.documents) == 0:
+        raise RuntimeError(
+            f"Empty corpus for language='{args.language}'. "
+            "Both IndicCorp and Wikipedia loaders returned 0 documents — "
+            "see the warnings above. Common fixes:\n"
+            "  - For IndicCorp v2: accept terms at "
+            "https://huggingface.co/datasets/ai4bharat/IndicCorpV2 and "
+            "ensure your HF_TOKEN is read-scope or higher.\n"
+            "  - For Wikipedia: pass a valid dump date with --wikipedia_date "
+            "(e.g. 20231101) matching an available dump on wikimedia/wikipedia.\n"
+            "  - Or pass --no_indiccorp and rely on Wikipedia alone."
+        )
 
     # ---------------------------------------------------------------- #
     # Build dataset
