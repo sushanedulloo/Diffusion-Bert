@@ -1,6 +1,7 @@
-# Markdown files (except README)
+# Markdown files (except README and the Urdu report)
 *.md
 !README.md
+!URDU_DIFFUSION_REPORT.md
 
 # Google Drive credentials — never commit these
 token.pickle

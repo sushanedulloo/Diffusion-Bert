@@ -117,6 +117,50 @@ GLUE_TEMPLATES: Dict[str, Dict] = {
 
 
 # ------------------------------------------------------------------ #
+# Urdu (Indic) task templates
+# ------------------------------------------------------------------ #
+#
+# Same schema as GLUE_TEMPLATES, but prompts, answer prefixes and label
+# words are in Urdu so they tokenize correctly under an Urdu / multilingual
+# tokenizer (default: jhu-clsp/mmBERT-base).
+#
+# IMPORTANT: pick label words that tokenize to exactly `answer_len` tokens
+# under the tokenizer you're using.  Verify with:
+#     tok.tokenize(label_word)
+# If a word splits into more pieces, either pick a shorter synonym or
+# bump answer_len.  The defaults below were chosen to be short and common.
+
+URDU_TEMPLATES: Dict[str, Dict] = {
+    # Binary sentiment — works with ai4bharat/IndicSentiment (ur split)
+    # or any 0=negative / 1=positive Urdu dataset.
+    "urdu_sentiment": {
+        "instruction_fn": lambda ex: (
+            f"اس جائزے کا جذبہ کیا ہے؟ جائزہ: "
+            f"{ex.get('INDIC REVIEW', ex.get('text', ex.get('sentence', '')))}"
+        ),
+        "answer_prefix": "جذبہ:",
+        # 0 = negative (منفی), 1 = positive (مثبت)
+        "label_words":   {0: "منفی", 1: "مثبت"},
+        "answer_len":    2,   # both words usually split into 2 subwords under mmBERT
+    },
+
+    # 3-way NLI — works with facebook/xnli (ur) and Divyanshu/indicxnli (ur).
+    # XNLI label convention: 0=entailment, 1=neutral, 2=contradiction
+    "urdu_nli": {
+        "instruction_fn": lambda ex: (
+            f"مقدمہ: {ex['premise']} "
+            f"مفروضہ: {ex['hypothesis']} "
+            f"کیا مقدمہ مفروضے کی تائید کرتا ہے؟"
+        ),
+        "answer_prefix": "جواب:",
+        # entailment=yes (ہاں), neutral=maybe (شاید), contradiction=no (نہیں)
+        "label_words":   {0: "ہاں", 1: "شاید", 2: "نہیں"},
+        "answer_len":    2,
+    },
+}
+
+
+# ------------------------------------------------------------------ #
 # Sequence builder
 # ------------------------------------------------------------------ #
 

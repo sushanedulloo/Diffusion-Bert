@@ -159,6 +159,25 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_common_args(p_dep)
     p_dep.add_argument("--languages", nargs="+", default=None)
 
+    # ── Urdu diffusion-style classification ──────────────────────────
+    for _urdu_task, _urdu_help in [
+        ("urdu_sentiment",
+         "Urdu sentiment (IndicSentiment) via instruction-prompted MDLM generation"),
+        ("urdu_nli",
+         "Urdu XNLI via instruction-prompted MDLM generation"),
+    ]:
+        p_u = sub.add_parser(_urdu_task, help=_urdu_help)
+        _add_common_args(p_u)
+        p_u.add_argument("--tokenizer_name", type=str, default="jhu-clsp/mmBERT-base",
+                         help="HF tokenizer id (default: jhu-clsp/mmBERT-base).")
+        p_u.add_argument("--num_steps",   type=int,   default=200,
+                         help="Reverse diffusion steps at inference.")
+        p_u.add_argument("--temperature", type=float, default=1.0)
+        p_u.add_argument("--max_train",   type=int,   default=None,
+                         help="Cap on training examples (None = all). Use for Kaggle.")
+        p_u.add_argument("--max_eval",    type=int,   default=None,
+                         help="Cap on eval examples (None = all).")
+
     # ── SNLI ─────────────────────────────────────────────────────────
     p_snli = sub.add_parser("snli", help="SNLI 3-way NLI (570K premise-hypothesis pairs)")
     _add_common_args(p_snli)
@@ -452,6 +471,27 @@ def main() -> None:
             use_amp=use_amp,
         )
         all_results["dep"] = results
+
+    # ------------------------------------------------------------------ #
+    elif args.command in ("urdu_sentiment", "urdu_nli"):
+        from evaluate.diffusion_urdu import run as urdu_run
+        results = urdu_run(
+            task_name=args.command,
+            checkpoint_dir=args.checkpoint,
+            output_dir=args.output_dir,
+            tokenizer_name=args.tokenizer_name,
+            max_seq_length=args.max_seq_length,
+            batch_size=args.batch_size,
+            num_epochs=args.epochs,
+            learning_rate=args.lr,
+            seed=args.seed,
+            use_amp=use_amp,
+            num_steps=args.num_steps,
+            temperature=args.temperature,
+            max_train=args.max_train,
+            max_eval=args.max_eval,
+        )
+        all_results[args.command] = results
 
     # ------------------------------------------------------------------ #
     elif args.command == "snli":

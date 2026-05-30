@@ -41,9 +41,27 @@ import math
 import sys
 
 import torch
-from transformers import BertTokenizer
+from transformers import AutoTokenizer
 
 from config import BertConfig
+
+# ------------------------------------------------------------------ #
+# Model-size presets
+# ------------------------------------------------------------------ #
+# Quick presets to let pre-training fit on small GPUs (e.g. Kaggle free
+# tier P100 / T4 with ~16 GB).  The "base" preset reproduces BERT-Base.
+# "small" matches BERT-Small from Turc et al. 2019 (Well-Read Students
+# Learn Better, https://arxiv.org/abs/1908.08962). "tiny" matches BERT-Tiny.
+MODEL_SIZE_PRESETS = {
+    "tiny":  dict(hidden_size=128, num_hidden_layers=2,  num_attention_heads=2,
+                  intermediate_size=512),
+    "mini":  dict(hidden_size=256, num_hidden_layers=4,  num_attention_heads=4,
+                  intermediate_size=1024),
+    "small": dict(hidden_size=512, num_hidden_layers=4,  num_attention_heads=8,
+                  intermediate_size=2048),
+    "base":  dict(hidden_size=768, num_hidden_layers=12, num_attention_heads=12,
+                  intermediate_size=3072),
+}
 from model.bert              import BertModel
 from model.pretraining_heads import BertForPreTraining
 from data.corpus             import TextCorpus
@@ -76,16 +94,39 @@ def parse_args() -> argparse.Namespace:
     # ----- Data -------------------------------------------------------- #
     data = parser.add_argument_group("Data")
     data.add_argument(
+        "--language", type=str, default="en",
+        help=(
+            "Pre-training language code. "
+            "'en' (default) → English Wikipedia + BooksCorpus (original BERT). "
+            "'ur' → Urdu IndicCorp v2 + Urdu Wikipedia (IndicBERT-style). "
+            "Any other code → Wikipedia in that language."
+        ),
+    )
+    data.add_argument(
+        "--tokenizer_name", type=str, default=None,
+        help=(
+            "HuggingFace tokenizer name. "
+            "Defaults: 'bert-base-uncased' for --language en, "
+            "'jhu-clsp/mmBERT-base' (Modern Multilingual BERT) for any "
+            "other language."
+        ),
+    )
+    data.add_argument(
         "--no_bookcorpus", action="store_true",
-        help="Skip the BooksCorpus dataset (English).",
+        help="Skip the BooksCorpus dataset (English only).",
+    )
+    data.add_argument(
+        "--no_indiccorp", action="store_true",
+        help="Skip AI4Bharat IndicCorp v2 (non-English only). "
+             "Useful when IndicCorp access is gated and you only want Wikipedia.",
     )
     data.add_argument(
         "--max_docs", type=int, default=None,
-        help="Maximum Wikipedia articles to load (None = all).",
+        help="Maximum articles to load per source (None = all).",
     )
     data.add_argument(
         "--max_examples", type=int, default=None,
-        help="Maximum total NSP examples (None = all). Useful for quick tests.",
+        help="Maximum total packed examples (None = all). Useful for quick tests.",
     )
     data.add_argument(
         "--wikipedia_date", type=str, default="20220301",
@@ -94,6 +135,15 @@ def parse_args() -> argparse.Namespace:
 
     # ----- Model ------------------------------------------------------- #
     model_g = parser.add_argument_group("Model (BERT-Base defaults)")
+    model_g.add_argument(
+        "--model_size", type=str, default=None,
+        choices=list(MODEL_SIZE_PRESETS.keys()),
+        help=(
+            "Model-size preset. Overrides --hidden_size / "
+            "--num_hidden_layers / --num_attention_heads / --intermediate_size. "
+            "Use 'tiny' or 'mini' for Kaggle free-tier, 'base' for full BERT-Base."
+        ),
+    )
     model_g.add_argument("--vocab_size",             type=int, default=30_522)
     model_g.add_argument("--hidden_size",             type=int, default=768)
     model_g.add_argument("--num_hidden_layers",       type=int, default=12)
@@ -202,6 +252,15 @@ def main() -> None:
         torch.cuda.manual_seed_all(args.seed)
 
     # ---------------------------------------------------------------- #
+    # Apply model-size preset (if any) — overrides matching CLI args
+    # ---------------------------------------------------------------- #
+    if args.model_size is not None:
+        preset = MODEL_SIZE_PRESETS[args.model_size]
+        logger.info(f"Applying model-size preset '{args.model_size}': {preset}")
+        for k, v in preset.items():
+            setattr(args, k, v)
+
+    # ---------------------------------------------------------------- #
     # Build BertConfig from CLI args
     # ---------------------------------------------------------------- #
     config = BertConfig(
@@ -237,19 +296,29 @@ def main() -> None:
     # ---------------------------------------------------------------- #
     # Tokenizer
     # ---------------------------------------------------------------- #
-    logger.info("Loading tokenizer (bert-base-uncased) …")
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    if args.tokenizer_name is None:
+        args.tokenizer_name = (
+            "bert-base-uncased"
+            if args.language == "en"
+            else "jhu-clsp/mmBERT-base"
+        )
+    logger.info(f"Loading tokenizer ({args.tokenizer_name}) …")
+    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name)
     config.vocab_size = tokenizer.vocab_size
     # Store mask_token_id on config for use in diffusion trainer
     config.mask_token_id = tokenizer.mask_token_id
-    logger.info(f"Vocabulary size: {config.vocab_size:,}  |  [MASK] id: {config.mask_token_id}")
+    logger.info(
+        f"Vocabulary size: {config.vocab_size:,}  |  [MASK] id: {config.mask_token_id}"
+    )
 
     # ---------------------------------------------------------------- #
     # Load corpus
     # ---------------------------------------------------------------- #
-    logger.info("Loading text corpus …")
+    logger.info(f"Loading text corpus (language={args.language}) …")
     corpus = TextCorpus(
+        language       = args.language,
         use_bookcorpus = not args.no_bookcorpus,
+        use_indiccorp  = not args.no_indiccorp,
         max_docs       = args.max_docs,
         wikipedia_date = args.wikipedia_date,
     )
